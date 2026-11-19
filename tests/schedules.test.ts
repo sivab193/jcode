@@ -28,14 +28,14 @@ function fakeResult(success = true): RunResult {
 }
 
 async function withTempHome(fn: () => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'jcode-schedules-'));
-  const savedHome = process.env.JCODE_HOME;
-  process.env.JCODE_HOME = dir;
+  const dir = await mkdtemp(join(tmpdir(), 'scode-schedules-'));
+  const savedHome = process.env.SCODE_HOME;
+  process.env.SCODE_HOME = dir;
   try {
     await fn();
   } finally {
-    if (savedHome === undefined) delete process.env.JCODE_HOME;
-    else process.env.JCODE_HOME = savedHome;
+    if (savedHome === undefined) delete process.env.SCODE_HOME;
+    else process.env.SCODE_HOME = savedHome;
   }
 }
 

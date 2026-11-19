@@ -38,7 +38,7 @@ test('backends pane separates login, usage, reset, and provider columns', () => 
           ],
         },
       }),
-      backend({ id: 'codex-b', displayName: 'Codex school', loginStatus: 'setup', status: 'unavailable', note: 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)' }),
+      backend({ id: 'codex-b', displayName: 'Codex school', loginStatus: 'setup', status: 'unavailable', note: 'no CODEX_HOME configured (SCODE_CODEX_B_HOME)' }),
       backend({ id: 'agy', displayName: 'Antigravity', loginStatus: 'active', quotaMode: 'reactive', authProvider: 'Google OAuth / GCP' }),
       backend({ id: 'opencode', displayName: 'OpenCode', loginStatus: 'active', model: 'opencode/big-pickle', quotaMode: 'provider', authProvider: 'OpenCode free' }),
       backend({ id: 'claude', displayName: 'Claude', loginStatus: 'active', quotaMode: 'provider', authProvider: 'Amazon Bedrock' }),

@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import type { JcodeConfig } from '../dist/config.js';
+import type { ScodeConfig } from '../dist/config.js';
 import { cavemanEnabledFor, wrapSpawn } from '../dist/core/caveman.js';
 
-function configWith(caveman: JcodeConfig['caveman']): JcodeConfig {
+function configWith(caveman: ScodeConfig['caveman']): ScodeConfig {
   return {
     quotaFloor: 0.1,
     defaultTimeoutMs: 1000,
@@ -61,7 +61,7 @@ test('caveman: missing binary warns and runs bare', async () => {
 });
 
 test('caveman: present binary wraps the command and sets DO_NOT_TRACK', async () => {
-  const dir = join(tmpdir(), `jcode-caveman-test-${Date.now()}`);
+  const dir = join(tmpdir(), `scode-caveman-test-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   const fake = join(dir, process.platform === 'win32' ? 'caveman.cmd' : 'caveman');
   await writeFile(fake, process.platform === 'win32' ? '@echo off\r\necho caveman-stub\r\n' : '#!/bin/sh\necho caveman-stub\n');

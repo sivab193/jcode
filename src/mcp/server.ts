@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * jcode-tools MCP server (Phase 4). Stdio transport — spawned by the coding
+ * scode-tools MCP server (Phase 4). Stdio transport — spawned by the coding
  * CLIs via `node <scode>/dist/mcp/server.js` (see `scode tools install`).
  * All logging goes to stderr; stdout is the protocol.
  */
@@ -10,7 +10,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ensureStateHome, statePaths } from '../config.js';
 import { callTool, TOOL_DESCRIPTIONS, TOOL_INPUT_SHAPES, TOOL_NAMES } from './tools.js';
 
-const server = new McpServer({ name: 'jcode-tools', version: '0.1.0' });
+const server = new McpServer({ name: 'scode-tools', version: '0.1.0' });
 
 /** Log every tool call for the Phase 5 dead-tool check. Fire-and-forget: a logging failure never breaks the call. */
 async function logToolCall(tool: string, ok: boolean, durationMs: number): Promise<void> {
@@ -37,4 +37,4 @@ for (const name of TOOL_NAMES) {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error('[jcode-tools] MCP server running (stdio): pdf-read, latex-build, file-peek');
+console.error('[scode-tools] MCP server running (stdio): pdf-read, latex-build, file-peek');

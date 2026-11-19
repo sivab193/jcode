@@ -10,7 +10,7 @@ import type { AdapterCallbacks, BackendAdapter } from './types.js';
  * carries `result`, `session_id`, usage and `total_cost_usd`.
  *
  * DISABLED by default behind the double-gate (config `claudeEnabled` AND
- * env `JCODE_CLAUDE_ENABLED=true`) until Claude Pro is live and its smoke
+ * env `SCODE_CLAUDE_ENABLED=true`) until Claude Pro is live and its smoke
  * test passes. The adapter refuses to run while disabled — the policy and
  * dispatcher also exclude it, so this is the third lock, not the only one.
  *

@@ -1,14 +1,24 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { existsSync, renameSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { THEME_IDS, type BackendId, type ThemeId } from './core/types.js';
+
+/**
+ * Read a renamed env var, honoring the old `JCODE_*` name as a fallback so
+ * existing shells and scripts keep working. The `SCODE_*` name wins when
+ * both are set. The legacy names are undocumented going forward.
+ */
+export function envVar(primary: string, legacy: string): string | undefined {
+  return process.env[primary] ?? process.env[legacy];
+}
 
 export interface BackendProfile {
   label?: string;
   account?: string;
 }
 
-export interface JcodeConfig {
+export interface ScodeConfig {
   quotaFloor: number;
   defaultTimeoutMs: number;
   claudeEnabled: boolean;
@@ -35,7 +45,7 @@ export interface JcodeConfig {
   };
   /**
    * Graphify code graph. enabled: build/query the per-repo graph (default
-   * true; set JCODE_GRAPHIFY=false or enabled: false to turn it off).
+   * true; set SCODE_GRAPHIFY=false or enabled: false to turn it off).
    * autoBuild: build the graph before dispatch when it is missing or stale
    * (default true). No-op when the graphify binary is not installed.
    */
@@ -45,7 +55,7 @@ export interface JcodeConfig {
   };
 }
 
-const defaults: JcodeConfig = {
+const defaults: ScodeConfig = {
   quotaFloor: 0.1,
   defaultTimeoutMs: 30 * 60 * 1000,
   claudeEnabled: false,
@@ -54,8 +64,29 @@ const defaults: JcodeConfig = {
   opencodeModel: 'opencode/big-pickle',
 };
 
+let migrationAttempted = false;
+
 export function stateHome(): string {
-  return resolve(process.env.JCODE_HOME || join(homedir(), '.jcode'));
+  const override = envVar('SCODE_HOME', 'JCODE_HOME');
+  if (override) return resolve(override);
+  const next = join(homedir(), '.scode');
+  // One-time migration: an install that kept its state in ~/.jcode moves
+  // wholesale to ~/.scode the first time the new name is used. Runs once
+  // per process; a failed move leaves the old dir in place and is retried
+  // next run (state is never written to both dirs).
+  if (!migrationAttempted) {
+    migrationAttempted = true;
+    const legacy = join(homedir(), '.jcode');
+    if (!existsSync(next) && existsSync(legacy)) {
+      try {
+        renameSync(legacy, next);
+        console.error(`[scode] moved state from ~/.jcode to ~/.scode`);
+      } catch {
+        // Leave the old dir alone; the next run retries the move.
+      }
+    }
+  }
+  return resolve(next);
 }
 
 export const statePaths = () => ({
@@ -76,6 +107,8 @@ export const statePaths = () => ({
   toolCalls: join(stateHome(), 'tool-calls.jsonl'),
   /** Scheduled jobs (cron + one-shot). */
   schedules: join(stateHome(), 'schedules.json'),
+  /** Threads (T3-style: one branch + worktree + session per thread). */
+  threads: join(stateHome(), 'threads.json'),
 });
 
 export async function ensureStateHome(): Promise<void> {
@@ -86,12 +119,12 @@ function isThemeId(value: unknown): value is ThemeId {
   return typeof value === 'string' && THEME_IDS.some((theme) => theme === value);
 }
 
-export async function loadConfig(): Promise<JcodeConfig> {
+export async function loadConfig(): Promise<ScodeConfig> {
   await ensureStateHome();
   const paths = statePaths();
-  let fromDisk: Partial<JcodeConfig> = {};
+  let fromDisk: Partial<ScodeConfig> = {};
   try {
-    fromDisk = JSON.parse(await readFile(paths.config, 'utf8')) as Partial<JcodeConfig>;
+    fromDisk = JSON.parse(await readFile(paths.config, 'utf8')) as Partial<ScodeConfig>;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     // Missing config means defaults. Do not create it while reading: multiple
@@ -104,23 +137,23 @@ export async function loadConfig(): Promise<JcodeConfig> {
     ...fromDisk,
     theme: isThemeId(fromDisk.theme) ? fromDisk.theme : defaults.theme,
     claudeEnabled:
-      process.env.JCODE_CLAUDE_ENABLED === 'false'
+      envVar('SCODE_CLAUDE_ENABLED', 'JCODE_CLAUDE_ENABLED') === 'false'
         ? false
         : fromDisk.claudeEnabled === true,
     codexHomes: {
       ...defaults.codexHomes,
       ...fromDisk.codexHomes,
-      a: process.env.JCODE_CODEX_A_HOME || fromDisk.codexHomes?.a,
-      b: process.env.JCODE_CODEX_B_HOME || fromDisk.codexHomes?.b,
+      a: envVar('SCODE_CODEX_A_HOME', 'JCODE_CODEX_A_HOME') || fromDisk.codexHomes?.a,
+      b: envVar('SCODE_CODEX_B_HOME', 'JCODE_CODEX_B_HOME') || fromDisk.codexHomes?.b,
     },
-    opencodeAttachUrl: process.env.JCODE_OPENCODE_ATTACH || fromDisk.opencodeAttachUrl,
+    opencodeAttachUrl: envVar('SCODE_OPENCODE_ATTACH', 'JCODE_OPENCODE_ATTACH') || fromDisk.opencodeAttachUrl,
     caveman: {
       ...fromDisk.caveman,
-      enabled: process.env.JCODE_CAVEMAN === 'true' ? true : (fromDisk.caveman?.enabled ?? false),
+      enabled: envVar('SCODE_CAVEMAN', 'JCODE_CAVEMAN') === 'true' ? true : (fromDisk.caveman?.enabled ?? false),
     },
     graphify: {
       ...fromDisk.graphify,
-      enabled: process.env.JCODE_GRAPHIFY === 'false' ? false : (fromDisk.graphify?.enabled ?? true),
+      enabled: envVar('SCODE_GRAPHIFY', 'JCODE_GRAPHIFY') === 'false' ? false : (fromDisk.graphify?.enabled ?? true),
       autoBuild: fromDisk.graphify?.autoBuild ?? true,
     },
   };
@@ -131,7 +164,7 @@ export async function setTheme(theme: ThemeId): Promise<void> {
 }
 
 /** Atomically merge top-level config fields while preserving unknown settings. */
-export async function updateConfig(patch: Partial<JcodeConfig>): Promise<void> {
+export async function updateConfig(patch: Partial<ScodeConfig>): Promise<void> {
   await ensureStateHome();
   const { config } = statePaths();
   let current: Record<string, unknown> = {};

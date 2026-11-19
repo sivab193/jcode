@@ -27,7 +27,7 @@ function git(args: string[], cwd: string): Promise<string> {
 }
 
 async function tempRepo(): Promise<string> {
-  const dir = join(tmpdir(), `jcode-graphify-test-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
+  const dir = join(tmpdir(), `scode-graphify-test-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, 'a.ts'), 'export function hello(): string { return "hi"; }\n');
   await git(['init', '-q'], dir);
@@ -112,7 +112,7 @@ test('graphify: graphStatus reports current vs stale from built_at_commit', asyn
 
 test('graphify: resolveMainCheckout finds the main checkout from a worktree', async () => {
   const dir = await tempRepo();
-  const worktree = join(tmpdir(), `jcode-graphify-wt-${Date.now()}`);
+  const worktree = join(tmpdir(), `scode-graphify-wt-${Date.now()}`);
   try {
     await git(['worktree', 'add', '-q', worktree, 'HEAD'], dir);
     const main = await resolveMainCheckout(worktree);
@@ -125,7 +125,7 @@ test('graphify: resolveMainCheckout finds the main checkout from a worktree', as
 });
 
 test('graphify: resolveMainCheckout falls back to cwd outside a repo', async () => {
-  const dir = join(tmpdir(), `jcode-graphify-nogit-${Date.now()}`);
+  const dir = join(tmpdir(), `scode-graphify-nogit-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   try {
     assert.equal(await resolveMainCheckout(dir), dir);
@@ -186,7 +186,7 @@ test('graphify: runGraphQuery maps exit codes 0/3/4 to answers, others to errors
 test('graphify: buildGraph reports failure without throwing when the binary is missing', async () => {
   const dir = await tempRepo();
   try {
-    const result = await buildGraph(dir, { binary: 'definitely-not-a-real-binary-jcode', timeoutMs: 10_000 });
+    const result = await buildGraph(dir, { binary: 'definitely-not-a-real-binary-scode', timeoutMs: 10_000 });
     assert.equal(result.ok, false);
     assert.match(result.output, /ENOENT|not found|no such/i);
   } finally {

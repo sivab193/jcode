@@ -34,7 +34,7 @@ export function classify(brief: string): Classification {
 
 /**
  * Laya first, rules as fallback (Phase 6). When Laya is not serving
- * (JCODE_LAYA_URL unset) or its answer is invalid, this is exactly classify().
+ * (SCODE_LAYA_URL unset) or its answer is invalid, this is exactly classify().
  */
 export async function classifyAsync(brief: string): Promise<Classification> {
   return (await layaClassify(brief)) ?? classify(brief);

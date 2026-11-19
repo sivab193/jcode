@@ -127,6 +127,9 @@ export function joinRuns(records: LedgerRecord[]): JoinedRun[] {
   const runs: JoinedRun[] = [];
   for (const record of records) {
     if (record.event !== 'run-finished' || !record.taskId || !record.backend) continue;
+    // A cancelled run is the user stopping the job, not a backend outcome —
+    // counting it as a failure would teach the router the wrong lesson.
+    if (record.errorClass === 'cancelled') continue;
     const start = started.get(`${record.taskId}:${record.backend}`);
     runs.push({
       taskId: record.taskId,

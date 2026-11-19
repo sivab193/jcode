@@ -28,6 +28,10 @@ export interface QuotaWindow {
   /** All windows the probe reported (Codex has 5h/weekly/monthly). The top-level
    * fields carry the tightest window — the binding constraint. */
   windows?: Array<{ name: string; remainingFraction: number; resetsAt: string | null; windowMinutes: number }>;
+  /** Codex reset credits (T3-style): one-shot window resets the user can spend. */
+  resetCredits?: { availableCount: number; nextExpiresAt?: string };
+  /** Codex plan type from the rate-limits snapshot (e.g. 'go', 'plus'). */
+  planType?: string;
   /** Manual entries age out; a probe result always replaces them. */
   manualExpiresAt?: string;
   /** Set when a rate-limit failure put this backend into cooldown. */
@@ -74,7 +78,7 @@ export type ErrorClass =
   | 'capability' // agent ran but produced nothing usable
   | 'availability' // 5xx / network / MCP startup failure — retry sideways
   | 'timeout'
-  | 'cancelled'
+  | 'cancelled' // the user stopped the run — never fall back, never retry
   | 'backend-error'
   | 'auth';
 

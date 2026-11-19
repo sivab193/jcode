@@ -19,7 +19,7 @@ function snapshot(id: BackendSnapshot['id'], status: BackendSnapshot['status'] =
   };
 }
 
-const ENV_KEYS = ['JCODE_BIVIA', 'JCODE_BIVIA_API_KEY', 'BIVIA_API_KEY', 'A8_API_KEY', 'JCODE_LAYA_URL'] as const;
+const ENV_KEYS = ['SCODE_BIVIA', 'SCODE_BIVIA_API_KEY', 'BIVIA_API_KEY', 'A8_API_KEY', 'SCODE_LAYA_URL'] as const;
 
 function saveEnvironment(): Record<string, string | undefined> {
   return Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -46,8 +46,8 @@ test('bivia: classifies and selects a policy-eligible backend in fast mode', asy
   const saved = saveEnvironment();
   const originalFetch = globalThis.fetch;
   process.env.BIVIA_API_KEY = 'test-key';
-  delete process.env.JCODE_BIVIA;
-  delete process.env.JCODE_LAYA_URL;
+  delete process.env.SCODE_BIVIA;
+  delete process.env.SCODE_LAYA_URL;
   let requestBody: Record<string, unknown> | undefined;
   globalThis.fetch = async (_input, init) => {
     requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -71,8 +71,8 @@ test('bivia: rejects an available backend outside the local task policy', async 
   const originalFetch = globalThis.fetch;
   const originalWarn = console.warn;
   process.env.BIVIA_API_KEY = 'test-key';
-  delete process.env.JCODE_BIVIA;
-  delete process.env.JCODE_LAYA_URL;
+  delete process.env.SCODE_BIVIA;
+  delete process.env.SCODE_LAYA_URL;
   console.warn = () => {};
   globalThis.fetch = async () => response('general', 'kiro');
   try {
@@ -92,8 +92,8 @@ test('bivia: falls back to local rules when the API is unavailable', async () =>
   const originalFetch = globalThis.fetch;
   const originalWarn = console.warn;
   process.env.BIVIA_API_KEY = 'test-key';
-  delete process.env.JCODE_BIVIA;
-  delete process.env.JCODE_LAYA_URL;
+  delete process.env.SCODE_BIVIA;
+  delete process.env.SCODE_LAYA_URL;
   console.warn = () => {};
   globalThis.fetch = async () => {
     throw new Error('offline');
@@ -114,8 +114,8 @@ test('bivia: can be disabled without sending the task brief', async () => {
   const saved = saveEnvironment();
   const originalFetch = globalThis.fetch;
   process.env.BIVIA_API_KEY = 'test-key';
-  process.env.JCODE_BIVIA = 'false';
-  delete process.env.JCODE_LAYA_URL;
+  process.env.SCODE_BIVIA = 'false';
+  delete process.env.SCODE_LAYA_URL;
   globalThis.fetch = async () => {
     throw new Error('Bivia must be disabled');
   };
@@ -126,5 +126,28 @@ test('bivia: can be disabled without sending the task brief', async () => {
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnvironment(saved);
+  }
+});
+
+test('bivia: legacy JCODE_BIVIA=false disables routing', async () => {
+  const saved = saveEnvironment();
+  const savedJcode = process.env.JCODE_BIVIA;
+  const originalFetch = globalThis.fetch;
+  process.env.BIVIA_API_KEY = 'test-key';
+  delete process.env.SCODE_BIVIA;
+  process.env.JCODE_BIVIA = 'false';
+  delete process.env.SCODE_LAYA_URL;
+  globalThis.fetch = async () => {
+    throw new Error('Bivia must be disabled');
+  };
+  try {
+    const result = await routeTask('Add a Lambda endpoint', [snapshot('codex-a'), snapshot('kiro')]);
+    assert.equal(result.classification.taskClass, 'aws');
+    assert.equal(result.selection.backend, 'kiro');
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment(saved);
+    if (savedJcode === undefined) delete process.env.JCODE_BIVIA;
+    else process.env.JCODE_BIVIA = savedJcode;
   }
 });

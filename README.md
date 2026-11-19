@@ -124,7 +124,9 @@ inside the vendor's unmodified interactive CLI. Short greetings such as `hi`,
 paying the worktree, prompt-pack, and code-graph setup cost.
 
 The home screen shows compact token totals for today and the last seven days;
-press `t` for per-backend and daily detail. Cursor CLI and Bivia CLI are listed
+press `t` for per-backend and daily detail. For the full per-window limits
+view — % left, a remaining bar with a pace tick, and reset countdowns —
+run `scode usage` or press `u` in the TUI. Cursor CLI and Bivia CLI are listed
 separately as upcoming integrations.
 
 Backend rows separate login state, usage, reset time, and provider. Codex shows
@@ -158,11 +160,28 @@ scode session list
 scode session attach <task-id>
 ```
 
+For longer work, use a thread: its own branch, worktree, and backend
+session across turns, with a one-command review and ship:
+
+```sh
+scode thread new "Add a login page"
+scode thread continue 5e52e480 "Also add logout"
+scode diff 5e52e480
+scode pr 5e52e480
+```
+
+Zed's Agent panel can drive scode through ACP: run `scode zed-setup`,
+paste the block into Zed's settings, and pick scode in the panel. One
+Zed session is one thread. See [docs/threads.md](docs/threads.md) and
+[docs/acp.md](docs/acp.md).
+
 ## Features
 
 - Routes tasks across supported coding-agent CLIs based on task and quota.
 - Uses Bivia for task classification and backend selection when configured.
 - Runs concurrent tasks in separate Git worktrees and preserves completed edits.
+- Threads give long tasks a branch, worktree, and session, with `scode diff` and one-button `scode pr`.
+- Exposes the router to Zed through an ACP agent server.
 - Extracts readable assistant replies from vendor JSON streams.
 - Resumes jobs in each vendor's native interactive terminal UI.
 - Tracks runs and token usage in a local ledger, with home-screen totals.

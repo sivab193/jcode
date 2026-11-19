@@ -8,7 +8,7 @@ and logged in. This is that list, in order. Work from a fresh clone of
 
 ## 0. Baseline
 
-- `npm ci` then `npm test` — expect all 129 tests green.
+- `npm ci` then `npm test` — expect all 201 tests green (200 pass, 1 live Graphify test skipped when graphify is not installed).
   If any fail on macOS, that is a real bug: fix it on the branch, do not
   skip it.
 - `scode status` — every installed backend should show a version string.
@@ -38,17 +38,17 @@ logged-in CLI:
 - **MCP server load test** — must pass; it spawns the real server and lists
   all four tools over JSON-RPC.
 
-Doctor writes `~/.jcode/smoke.json`. Keep it — it is the record
+Doctor writes `~/.scode/smoke.json`. Keep it — it is the record
 of what this machine can do.
 
 ## 2. One real run per backend
 
 For each installed backend, run a real task through the router (not a
 smoke test): `scode run --backend <id> "<a small real task in a test repo>"`.
-Check each run in the ledger (`~/.jcode/ledger.jsonl`):
+Check each run in the ledger (`~/.scode/ledger.jsonl`):
 
 - `run-started` and `run-finished` records exist with matching task ids.
-- The worktree was created under `.git/jcode-worktrees/<taskId>` and removed
+- The worktree was created under `.git/scode-worktrees/<taskId>` and removed
   on success.
 - Tokens / cost / premium-requests are recorded when the backend reports
   them; absent when it does not. Never a fabricated number.
@@ -57,10 +57,10 @@ Check each run in the ledger (`~/.jcode/ledger.jsonl`):
 
 ## 3. Prompt pack
 
-- Run a job in a repo that has NO AGENTS.md / CLAUDE.md / JCODE_NOTES.md.
+- Run a job in a repo that has NO AGENTS.md / CLAUDE.md / SCODE_NOTES.md.
   The job's worktree diff must contain the four seeded files, and the agent
   must have read them (check the run output for a reference to the working
-  rules or JCODE_NOTES.md).
+  rules or SCODE_NOTES.md).
 - Run a job in a repo that HAS its own AGENTS.md. scode must not overwrite
   it — the file must be byte-identical afterwards.
 - If a backend ignores its steering file (some versions do), note which one
@@ -89,7 +89,7 @@ replace the TUI.
 
 ## 6. Caveman (only after §1's wrap test passes)
 
-- One real run with `JCODE_CAVEMAN=true` per backend. Compare token counts
+- One real run with `SCODE_CAVEMAN=true` per backend. Compare token counts
   in the ledger against the same task run without it. If a backend's output
   degrades or its JSON breaks under the wrap, add it to
   `caveman.perBackend` as disabled and note it here.
@@ -105,14 +105,14 @@ replace the TUI.
 - **OpenCode default provider** — the user's decision, not Codex's. Ask
   before changing `opencodeModel` away from free models.
 - **claude status-line rate-limits file** — the probe reads
-  `JCODE_CLAUDE_RATE_LIMITS_FILE` or `~/.jcode/claude-rate-limits.json`.
+  `SCODE_CLAUDE_RATE_LIMITS_FILE` or `~/.scode/claude-rate-limits.json`.
   Confirm the real path once Claude Code is installed.
 
 ## 8. Claude (only after Pro is live, ~Nov 30)
 
 Do not enable before then. When Pro is live:
 
-1. Set `claudeEnabled: true` in config AND `JCODE_CLAUDE_ENABLED=true`.
+1. Set `claudeEnabled: true` in config AND `SCODE_CLAUDE_ENABLED=true`.
 2. `scode doctor` — the claude dispatch smoke must pass.
 3. One real `scode run --backend claude` task; verify `total_cost_usd`
    lands in the ledger.
@@ -122,7 +122,7 @@ Do not enable before then. When Pro is live:
 ## 9. Learn loop (after a few days of real runs)
 
 - `scode learn` — the report must show real per-backend x class stats.
-- `~/.jcode/lessons.md` must accumulate one entry per fold.
+- `~/.scode/lessons.md` must accumulate one entry per fold.
 - If a proposal looks wrong, say which numbers disagree — do not tune the
   thresholds to make the report look nicer.
 
@@ -170,6 +170,51 @@ Do not enable before then. When Pro is live:
 - Dart check (informational): run `graphify update` on the SplitLLM
   flutter-app and confirm whether a newer graphify version parses Dart yet
   — 0.9.112 did not.
+
+## 13. Usage limits
+
+- `scode usage` must show every window the probes report: Codex Session
+  + Weekly (+ Monthly credit limit and reset credits when the snapshot
+  carries them), Claude five_hour + seven_day (+ model-scoped weeklies
+  and Monthly spend when the status-line file carries them).
+- The % left must match the probe's used percent (100 − used); the reset
+  countdown must match the probe's resetsAt. A backend with no quota
+  surface (copilot, opencode) must say so honestly — never a zero or a
+  guessed number.
+- `u` in the TUI must open the same view; any key must return with an
+  empty task bar (the `u` must not leak into the task text).
+- Quota failure path: run a codex job to a rate limit if one is near (do
+  not burn quota to test this). The dispatcher must cool the account down
+  until the reset Codex printed in its error text, and the limits view
+  must show the cooling-down state.
+
+## 14. Threads, PR, and Zed
+
+- `scode thread new` in a real repo: branch `scode/<id>-<slug>` exists,
+  worktree at `.git/scode-worktrees/<id>` is on that branch (not
+  detached), prompt pack seeded once, first turn runs and is recorded.
+- `thread continue` twice on the same thread: turns increment, the
+  backend session resumes (check the ledger `sessionResumed` flag on
+  turn 2), and the worktree still exists after a successful turn.
+- `scode diff` shows the committed change vs the base plus uncommitted
+  work; `--stat` shows only the stat.
+- `scode pr --dry-run` prints the commit, push, and `gh pr create`
+  steps without running them. A real `scode pr` on a repo with an
+  origin remote and a signed-in `gh` must open the PR and record its
+  URL on the thread. A repo without an origin must fail BEFORE any
+  commit is created.
+- `G` in the TUI opens the threads list; any key returns with an empty
+  task bar (the `G` must not leak into the task text). Lowercase `g`
+  must still start a task normally.
+- `scode tools install` then a backend run: the agent can call
+  `thread-list`, `thread-status`, and `thread-diff` (check
+  `tool-calls.jsonl`).
+- Zed: `scode zed-setup`, paste the block into settings.json, pick
+  scode in the Agent Panel. A prompt must create a thread (same id as
+  the Zed session), stream output, and appear in `scode thread list`.
+  Stopping a prompt mid-run must cancel the dispatch — the vendor CLI
+  must not keep running after Zed stops it. `scode zed <id>` opens the
+  thread's worktree in Zed.
 
 ## What to change vs what to report
 

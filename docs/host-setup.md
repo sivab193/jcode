@@ -43,7 +43,7 @@ CODEX_HOME="$HOME/.codex-a" codex login   # account A
 CODEX_HOME="$HOME/.codex-b" codex login   # account B
 ```
 
-Then point scode at them in `~/.jcode/config.json`
+Then point scode at them in `~/.scode/config.json`
 (see `config.example.json` in the repo):
 
 ```json
@@ -55,14 +55,14 @@ silently sharing account A's login.
 
 ## 4. Config
 
-Copy `config.example.json` to `~/.jcode/config.json` and edit it.
+Copy `config.example.json` to `~/.scode/config.json` and edit it.
 The fields:
 
 - `quotaFloor` (0.1) — backends below this remaining fraction are skipped
   unless they are the only option.
 - `defaultTimeoutMs` — per-job timeout (30 min default).
 - `claudeEnabled` — **leave false** until Claude Pro is live and the smoke
-  test passes. Enabling also needs `JCODE_CLAUDE_ENABLED=true` in the
+  test passes. Enabling also needs `SCODE_CLAUDE_ENABLED=true` in the
   environment (double-gate).
 - `opencodeModel` — free model for the opencode backend.
 - `copilotMaxContinues` — cap on Copilot autonomous steps per run (premium
@@ -74,12 +74,33 @@ The fields:
 
 Environment variables (all optional):
 
-- `JCODE_HOME` — state dir (default `~/.jcode`).
-- `JCODE_CODEX_A_HOME` / `JCODE_CODEX_B_HOME` — same as `codexHomes`.
-- `JCODE_OPENCODE_ATTACH` — attach to a warm `opencode serve`.
-- `JCODE_CAVEMAN=true` — enable the Caveman layer.
-- `JCODE_LAYA_URL` — Laya classification endpoint (`POST /classify`).
-- `JCODE_CLAUDE_RATE_LIMITS_FILE` — claude status-line rate-limits file.
+- `SCODE_HOME` — state dir (default `~/.scode`).
+
+## Renamed from jcode
+
+State, env vars, the MCP server, and thread branches were renamed from
+`jcode` to `scode`. Existing installs migrate without losing anything:
+
+- State: the first run moves `~/.jcode` to `~/.scode` (whole directory,
+  one move). Nothing is written to both dirs.
+- Env vars: the old `JCODE_*` names are still honored when the matching
+  `SCODE_*` name is unset (`SCODE_HOME`, `SCODE_CODEX_A_HOME`,
+  `SCODE_CODEX_B_HOME`, `SCODE_CLAUDE_ENABLED`,
+  `SCODE_CLAUDE_RATE_LIMITS_FILE`, `SCODE_CAVEMAN`, `SCODE_GRAPHIFY`,
+  `SCODE_OPENCODE_ATTACH`, `SCODE_LAYA_URL`, `SCODE_BIVIA`,
+  `SCODE_BIVIA_API_KEY`). Prefer the new names going forward.
+- MCP: the server is now `scode-tools`. Run `scode tools install` once
+  to rewrite backend configs; it removes the old `jcode-tools` entry.
+  `scode tools status` flags any config that still has one.
+- Threads: new threads branch from `scode/<id>-<slug>` and worktrees
+  live in `.git/scode-worktrees/`. Existing threads keep their stored
+  `jcode/` branch and worktree paths and keep working.
+- The `jcode` command remains available as a compatibility alias.
+- `SCODE_CODEX_A_HOME` / `SCODE_CODEX_B_HOME` — same as `codexHomes`.
+- `SCODE_OPENCODE_ATTACH` — attach to a warm `opencode serve`.
+- `SCODE_CAVEMAN=true` — enable the Caveman layer.
+- `SCODE_LAYA_URL` — Laya classification endpoint (`POST /classify`).
+- `SCODE_CLAUDE_RATE_LIMITS_FILE` — claude status-line rate-limits file.
 
 ## 5. Verify
 
@@ -87,14 +108,14 @@ Environment variables (all optional):
 npm ci
 npm test          # expect all 129 tests green
 scode doctor      # Phase 0 gate — see docs/codex-local-testing.md
-scode tools install   # wire the jcode-tools MCP server into the backends
+scode tools install   # wire the scode-tools MCP server into the backends
 ```
 
 ## 6. Weekly habit
 
 Run `scode learn` once a week. It writes the report to
-`~/.jcode/learn-report.md` and appends the fold to
-`~/.jcode/lessons.md`. Proposals are presented, never
+`~/.scode/learn-report.md` and appends the fold to
+`~/.scode/lessons.md`. Proposals are presented, never
 auto-applied — read them, then change `config.json` by hand if you agree.
 
 ## Decisions still open

@@ -29,9 +29,9 @@ test('lessons: empty fold says so plainly', () => {
 });
 
 test('lessons: appends to the store without clobbering earlier folds', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'jcode-lessons-'));
-  const savedHome = process.env.JCODE_HOME;
-  process.env.JCODE_HOME = dir;
+  const dir = await mkdtemp(join(tmpdir(), 'scode-lessons-'));
+  const savedHome = process.env.SCODE_HOME;
+  process.env.SCODE_HOME = dir;
   try {
     const first = analyzeLedger([], [], new Date('2026-11-11T12:00:00Z'));
     const second = analyzeLedger([], [], new Date('2026-11-18T12:00:00Z'));
@@ -42,7 +42,7 @@ test('lessons: appends to the store without clobbering earlier folds', async () 
     assert.match(text, /## 2026-11-18/);
     assert.equal((text.match(/^## /gm) ?? []).length, 2);
   } finally {
-    if (savedHome === undefined) delete process.env.JCODE_HOME;
-    else process.env.JCODE_HOME = savedHome;
+    if (savedHome === undefined) delete process.env.SCODE_HOME;
+    else process.env.SCODE_HOME = savedHome;
   }
 });

@@ -79,3 +79,7 @@ test('extractDisplayText: renders agent prose and ignores protocol noise', () =>
   assert.equal(extractDisplayText({ type: 'item.completed', item: { type: 'command_execution', command: 'pwd' } }), undefined);
   assert.equal(extractDisplayText({ type: 'thread.started', thread_id: 'abc' }), undefined);
 });
+
+test('classifyFailure: cancelled wins over everything', () => {
+  assert.equal(classifyFailure(1, 'rate limit hit', false, true), 'cancelled');
+});

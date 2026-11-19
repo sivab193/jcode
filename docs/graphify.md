@@ -12,7 +12,7 @@ Graphify has two halves. scode uses only the first:
 
 - **Open-source CLI** — free, local, no account. `graphify update` parses
   code with tree-sitter into a graph, with zero LLM calls and nothing leaving
-  the machine. This is the jcode-compatible half.
+  the machine. This is the scode-compatible half.
 - **Hosted Graphify Cloud** (app.graphify.com) — free for up to 3 repos, then
   paid; it sends code to OpenAI/Anthropic subprocessors. This half conflicts
   with scode's local-first, no-paid-credits rules and is **not** used.
@@ -33,10 +33,10 @@ Graphify has two halves. scode uses only the first:
   that delete a lot of code).
 - **Pre-dispatch indexing** — before dispatching a job, scode builds the
   graph when it is missing or stale (config `graphify.autoBuild`, default
-  true; `JCODE_GRAPHIFY=false` turns the whole thing off). A missing or
+  true; `SCODE_GRAPHIFY=false` turns the whole thing off). A missing or
   failing graph never fails a job: the dispatcher warns and continues.
 - **Query path** — agents query through the `graph-query` tool in the
-  `jcode-tools` MCP suite (kinds: `query`, `explain`, `path`, `affected`,
+  `scode-tools` MCP suite (kinds: `query`, `explain`, `path`, `affected`,
   `god-nodes`), or directly with `graphify query` on the command line. The
   tool resolves the graph from the agent's cwd — including from a scode
   worktree, where it walks to the main checkout via

@@ -9,7 +9,7 @@ import { getPriors } from './scoring.js';
 import type { BackendId, RunResult } from './types.js';
 
 /**
- * Scheduled jobs. Schedules live in `~/.jcode/schedules.json` (versioned,
+ * Scheduled jobs. Schedules live in `~/.scode/schedules.json` (versioned,
  * so the shape can evolve). scode is a CLI, not a daemon, so nothing fires
  * on its own — schedules fire when something runs `scode schedule tick`:
  * the OS scheduler (see `installHint()`), or the TUI, which ticks every

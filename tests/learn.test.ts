@@ -15,10 +15,11 @@ function finished(taskId: string, backend: string, success: boolean, options: {
   cavemanWrapped?: boolean;
   stdoutTail?: string;
   finishedAt?: string;
+  errorClass?: string | null;
 } = {}) {
   return {
     event: 'run-finished', taskId, backend, success,
-    errorClass: success ? null : 'backend-error',
+    errorClass: options.errorClass ?? (success ? null : 'backend-error'),
     durationMs: options.durationMs ?? 60_000,
     usage: options.inputTokens !== undefined ? { inputTokens: options.inputTokens, outputTokens: 500 } : undefined,
     cavemanWrapped: options.cavemanWrapped ?? false,
@@ -117,7 +118,7 @@ test('learn: dead tools need 30 days of history', () => {
     { timestamp: '2026-11-17T12:00:00Z', tool: 'pdf-read', ok: true },
   ];
   const oldAnalysis = analyzeLedger([], old, now);
-  assert.deepEqual(oldAnalysis.deadTools, ['latex-build', 'graph-query']);
+  assert.deepEqual(oldAnalysis.deadTools, ['latex-build', 'graph-query', 'thread-list', 'thread-status', 'thread-diff']);
 });
 
 test('learn: prompt patterns need 5 runs per side and 10pp delta', () => {
@@ -130,4 +131,17 @@ test('learn: prompt patterns need 5 runs per side and 10pp delta', () => {
   const pattern = analysis.promptPatterns.find((p) => p.feature === 'mentions tests');
   assert.ok(pattern);
   assert.equal(pattern.deltaPp, 60);
+});
+
+test('learn: cancelled runs are skipped, not counted as failures', () => {
+  const records = [
+    started('c1', 'codex-a', 'task one', 'general'),
+    finished('c1', 'codex-a', false, { errorClass: 'cancelled' }),
+    started('c2', 'codex-a', 'task two', 'general'),
+    finished('c2', 'codex-a', true),
+  ];
+  const runs = joinRuns(records as never);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].taskId, 'c2');
+  assert.equal(analyzeLedger(records as never, []).totalRuns, 1);
 });

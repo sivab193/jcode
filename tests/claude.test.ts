@@ -6,20 +6,20 @@ import { join } from 'node:path';
 import { ClaudeAdapter } from '../dist/adapters/claude.js';
 
 async function withTempHome(config: Record<string, unknown>, envEnabled: string | undefined, fn: () => Promise<void>) {
-  const dir = await mkdtemp(join(tmpdir(), 'jcode-claude-'));
+  const dir = await mkdtemp(join(tmpdir(), 'scode-claude-'));
   await writeFile(join(dir, 'config.json'), JSON.stringify(config), 'utf-8');
-  const savedHome = process.env.JCODE_HOME;
-  const savedEnv = process.env.JCODE_CLAUDE_ENABLED;
-  process.env.JCODE_HOME = dir;
-  if (envEnabled === undefined) delete process.env.JCODE_CLAUDE_ENABLED;
-  else process.env.JCODE_CLAUDE_ENABLED = envEnabled;
+  const savedHome = process.env.SCODE_HOME;
+  const savedEnv = process.env.SCODE_CLAUDE_ENABLED;
+  process.env.SCODE_HOME = dir;
+  if (envEnabled === undefined) delete process.env.SCODE_CLAUDE_ENABLED;
+  else process.env.SCODE_CLAUDE_ENABLED = envEnabled;
   try {
     await fn();
   } finally {
-    if (savedHome === undefined) delete process.env.JCODE_HOME;
-    else process.env.JCODE_HOME = savedHome;
-    if (savedEnv === undefined) delete process.env.JCODE_CLAUDE_ENABLED;
-    else process.env.JCODE_CLAUDE_ENABLED = savedEnv;
+    if (savedHome === undefined) delete process.env.SCODE_HOME;
+    else process.env.SCODE_HOME = savedHome;
+    if (savedEnv === undefined) delete process.env.SCODE_CLAUDE_ENABLED;
+    else process.env.SCODE_CLAUDE_ENABLED = savedEnv;
   }
 }
 

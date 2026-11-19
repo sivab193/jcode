@@ -25,7 +25,7 @@
  * No measurement is claimed until real runs exist.
  */
 import type { SpawnSpec } from '../adapters/process.js';
-import type { JcodeConfig } from '../config.js';
+import type { ScodeConfig } from '../config.js';
 import { cliInfo } from './probes.js';
 import type { BackendId } from './types.js';
 
@@ -41,7 +41,7 @@ export const CAVEMAN_DEFAULTS: CavemanConfig = {
   perBackend: {},
 };
 
-export function cavemanEnabledFor(config: JcodeConfig, backend: BackendId): boolean {
+export function cavemanEnabledFor(config: ScodeConfig, backend: BackendId): boolean {
   const caveman = config.caveman ?? CAVEMAN_DEFAULTS;
   if (!caveman.enabled) return false;
   // Per-backend switch wins when set; otherwise the global switch applies.
@@ -57,7 +57,7 @@ let warnedMissing = false;
 export async function wrapSpawn(
   spec: SpawnSpec,
   backend: BackendId,
-  config: JcodeConfig,
+  config: ScodeConfig,
 ): Promise<{ spec: SpawnSpec; wrapped: boolean }> {
   const caveman = config.caveman ?? CAVEMAN_DEFAULTS;
   if (!cavemanEnabledFor(config, backend) || caveman.mode !== 'proxy') {

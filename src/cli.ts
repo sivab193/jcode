@@ -1,9 +1,22 @@
 import { resolve } from 'node:path';
+import { execFile } from 'node:child_process';
+import { runAcpServer } from './acp/server.js';
 import { dispatch } from './core/dispatcher.js';
 import { buildGraph, ensureGitignored, graphStatus, graphifyInfo, installGraphHooks } from './core/graphify.js';
 import { readLedgerTail } from './core/ledger.js';
 import { routeTask } from './core/router.js';
+import { createPr, renderDiffSummary, threadDiff } from './core/pr.js';
+import {
+  closeThread,
+  createThread,
+  dispatchThreadTurn,
+  findThread,
+  loadThreads,
+  renderThreadList,
+  renderThreadStatus,
+} from './core/threads.js';
 import { computeTokenStats, renderTokenDashboard } from './core/tokenStats.js';
+import { renderLimits } from './core/limits.js';
 import { backendSnapshots } from './core/quota.js';
 import {
   addSchedule,
@@ -35,9 +48,23 @@ export type Command =
   | { name: 'doctor'; quick?: boolean; full?: boolean }
   | { name: 'learn' }
   | { name: 'tokens' }
+  | { name: 'usage' }
   | { name: 'theme'; action: 'list' | 'set'; theme?: ThemeId }
   | { name: 'tools'; action: 'install' | 'status' }
   | { name: 'graph'; action: 'init' | 'status' | 'refresh'; path: string; force?: boolean }
+  | {
+      name: 'thread';
+      action: 'new' | 'list' | 'continue' | 'status' | 'close';
+      brief?: string;
+      id?: string;
+      backend?: BackendId;
+      cwd?: string;
+    }
+  | { name: 'diff'; id: string; statOnly?: boolean }
+  | { name: 'pr'; id: string; draft?: boolean; dryRun?: boolean }
+  | { name: 'acp' }
+  | { name: 'zed'; id: string }
+  | { name: 'zed-setup' }
   | {
       name: 'schedule';
       action: 'add' | 'list' | 'remove' | 'enable' | 'disable' | 'tick' | 'install';
@@ -73,6 +100,22 @@ export function parseArgs(argv: string[]): Command {
   if (name === 'backend') return parseBackendArgs(rest);
   if (name === 'learn') return { name: 'learn' };
   if (name === 'tokens') return { name: 'tokens' };
+  if (name === 'usage') return { name: 'usage' };
+  if (name === 'thread') return parseThreadArgs(rest);
+  if (name === 'acp') return { name: 'acp' };
+  if (name === 'zed-setup') return { name: 'zed-setup' };
+  if (name === 'zed') {
+    if (!rest[0]) throw new Error('Usage: scode zed <thread-id>');
+    return { name: 'zed', id: rest[0] };
+  }
+  if (name === 'diff') {
+    if (!rest[0]) throw new Error('Usage: scode diff <thread-id> [--stat]');
+    return { name: 'diff', id: rest[0], statOnly: rest.includes('--stat') };
+  }
+  if (name === 'pr') {
+    if (!rest[0]) throw new Error('Usage: scode pr <thread-id> [--draft] [--dry-run]');
+    return { name: 'pr', id: rest[0], draft: rest.includes('--draft'), dryRun: rest.includes('--dry-run') };
+  }
   if (name === 'theme') {
     if (rest.length === 0 || (rest.length === 1 && rest[0] === 'list')) {
       return { name: 'theme', action: 'list' };
@@ -165,6 +208,42 @@ function snapshotRows(item: BackendSnapshot): string[][] {
   ]);
 }
 
+function parseThreadArgs(rest: string[]): Extract<Command, { name: 'thread' }> {
+  const [action, ...args] = rest;
+  if (action === 'list') return { name: 'thread', action: 'list' };
+  if (action === 'status' || action === 'close') {
+    if (!args[0]) throw new Error(`Usage: scode thread ${action} <thread-id>`);
+    return { name: 'thread', action, id: args[0] };
+  }
+  if (action !== 'new' && action !== 'continue') {
+    throw new Error('Usage: scode thread <new|list|continue|status|close>');
+  }
+  let backend: BackendId | undefined;
+  let cwd: string | undefined;
+  let id: string | undefined;
+  const briefParts: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === '--backend') {
+      const value = args[++index];
+      if (!value || !isBackend(value)) throw new Error(`Invalid backend. Choose: ${BACKEND_IDS.join(', ')}`);
+      backend = value;
+    } else if (args[index] === '--cwd') {
+      const value = args[++index];
+      if (!value) throw new Error('--cwd requires a path');
+      cwd = resolve(value);
+    } else if (action === 'continue' && !id && briefParts.length === 0) {
+      // `thread continue <id> "<brief>"` — the first bare word is the id.
+      id = args[index];
+    } else {
+      briefParts.push(args[index]);
+    }
+  }
+  const brief = briefParts.join(' ').trim();
+  if (!brief) throw new Error(`scode thread ${action} requires a task brief`);
+  if (action === 'continue' && !id) throw new Error('Usage: scode thread continue <thread-id> "<follow-up>"');
+  return { name: 'thread', action, brief, id, backend, cwd };
+}
+
 function parseGraphArgs(rest: string[]): Extract<Command, { name: 'graph' }> {
   const [action, ...args] = rest;
   if (action !== 'init' && action !== 'status' && action !== 'refresh') {
@@ -251,13 +330,24 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
       '  scode doctor [--quick] [--full]          Phase 0 machine smoke tests',
       '  scode learn                              learning fold (Phase 5)',
       '  scode tokens                             token usage dashboard (today + last 7 days)',
+      '  scode usage                              usage limits per backend (Session/Weekly windows)',
       `  scode theme [list | set <${THEME_IDS.join('|')}>]  choose a TUI color theme`,
-      '  scode tools <install|status>             wire the jcode-tools MCP server into backends',
+      '  scode tools <install|status>             wire the scode-tools MCP server into backends',
       '  scode graph <init|status|refresh> [path] code graph for a repo (Graphify, local only)',
       '  scode schedule add "<task>" --cron "0 9 * * 1-5"  recurring job (local time)',
       '  scode schedule add "<task>" --at 2026-11-20T09:00  one-shot job',
       '  scode schedule add "<task>" --in 2h       one-shot job, relative',
       '  scode schedule <list|remove|enable|disable|tick|install>',
+      '',
+      ui.accent('THREADS & ZED'),
+      '  scode thread new "<task>" [--backend ID]  new thread (branch + worktree + session)',
+      '  scode thread <list|status|close> [id]     manage threads',
+      '  scode thread continue <id> "<follow-up>"  next turn on a thread',
+      '  scode diff <thread-id> [--stat]           thread change vs its base branch',
+      '  scode pr <thread-id> [--draft] [--dry-run] commit, push, open the PR',
+      '  scode acp                                ACP agent server for Zed (stdio)',
+      '  scode zed <thread-id>                    open a thread worktree in Zed',
+      '  scode zed-setup                          print the Zed agent_servers snippet',
       '',
       '',
       ui.dim(`Backends  ${BACKEND_IDS.join(' · ')}`),
@@ -331,6 +421,11 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     for (const line of renderTokenDashboard(stats)) console.log(line);
     return 0;
   }
+  if (command.name === 'usage') {
+    const snapshots = await backendSnapshots({ refresh: true });
+    for (const line of renderLimits(snapshots, new Date())) console.log(line);
+    return 0;
+  }
   if (command.name === 'doctor') {
     const { exitCode } = await runDoctor({ quick: command.quick, full: command.full });
     return exitCode;
@@ -339,7 +434,8 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     if (command.action === 'status') {
       const rows = await toolsStatus();
       for (const row of rows) {
-        console.log(`${row.backend.padEnd(10)} ${row.configured ? 'configured' : 'not configured'}  ${row.path}`);
+        const legacy = row.legacy ? '  (stale jcode-tools entry — run `scode tools install` to clean it up)' : '';
+        console.log(`${row.backend.padEnd(10)} ${row.configured ? 'configured' : 'not configured'}  ${row.path}${legacy}`);
       }
       console.log('agy        skipped (config path unconfirmed — see `scode tools install`)');
       return 0;
@@ -461,6 +557,89 @@ export async function runHeadless(command: Exclude<Command, { name: 'tui' }>): P
     }
     console.log(`Graph refreshed: ${build.nodeCount ?? '?'} nodes in ${(build.durationMs / 1000).toFixed(1)}s.`);
     return 0;
+  }
+  if (command.name === 'acp') {
+    return runAcpServer();
+  }
+  if (command.name === 'zed-setup') {
+    // Zed reads settings.json, not the shell's PATH — an absolute command
+    // is what works when Zed starts from the Dock or Start menu.
+    const entry = process.argv[1] ?? '';
+    const commandPath = entry.endsWith('index.js') ? entry : 'scode';
+    console.log('Add this to Zed settings.json (~/.config/zed/settings.json),');
+    console.log('then pick scode in the Agent Panel:');
+    console.log(JSON.stringify({
+      agent_servers: {
+        scode: { type: 'custom', command: commandPath, args: ['acp'], env: {} },
+      },
+    }, null, 2));
+    return 0;
+  }
+  if (command.name === 'zed') {
+    const threads = await loadThreads();
+    const thread = findThread(threads, command.id);
+    const opened = await new Promise<boolean>((resolvePromise) => {
+      const child = execFile('zed', [thread.worktree], { windowsHide: true }, (error) => {
+        resolvePromise(!error);
+      });
+      child.on('error', () => resolvePromise(false));
+    });
+    if (!opened) {
+      console.log('The zed CLI is not available. Install Zed and its CLI (zed.dev), then retry.');
+      return 1;
+    }
+    console.log(`Opened ${thread.worktree} in Zed.`);
+    return 0;
+  }
+  if (command.name === 'thread') {
+    if (command.action === 'list') {
+      for (const line of renderThreadList(await loadThreads())) console.log(line);
+      return 0;
+    }
+    if (command.action === 'status') {
+      const thread = findThread(await loadThreads(), command.id as string);
+      for (const line of renderThreadStatus(thread)) console.log(line);
+      const diff = await threadDiff(thread);
+      for (const line of renderDiffSummary(diff, thread).slice(2)) console.log(line);
+      return 0;
+    }
+    if (command.action === 'close') {
+      const closed = await closeThread(command.id as string);
+      console.log(`Closed thread ${closed.id} ("${closed.title}"). Branch and worktree are kept.`);
+      return 0;
+    }
+    if (command.action === 'new') {
+      const thread = await createThread(command.brief as string, { backend: command.backend, cwd: command.cwd });
+      console.log(`Thread ${thread.id} on branch ${thread.branch} (from ${thread.baseBranch}).`);
+      const outcome = await dispatchThreadTurn(thread, command.brief as string, { backend: command.backend });
+      console.log(`Turn 1 ${outcome.result.success ? 'succeeded' : `failed (${outcome.result.errorClass ?? 'unknown'})`} on ${outcome.result.backend}.`);
+      console.log(`Continue with: scode thread continue ${thread.id} "<follow-up>"`);
+      return outcome.result.success ? 0 : 1;
+    }
+    // continue
+    const thread = findThread(await loadThreads(), command.id as string);
+    const outcome = await dispatchThreadTurn(thread, command.brief as string, { backend: command.backend });
+    if (outcome.switchedBackend) {
+      console.log(`[scode] switched backend: ${outcome.selectionReason}`);
+    }
+    console.log(`Turn ${outcome.thread.turns} ${outcome.result.success ? 'succeeded' : `failed (${outcome.result.errorClass ?? 'unknown'})`} on ${outcome.result.backend}.`);
+    return outcome.result.success ? 0 : 1;
+  }
+  if (command.name === 'diff') {
+    const thread = findThread(await loadThreads(), command.id);
+    const diff = await threadDiff(thread);
+    for (const line of renderDiffSummary(diff, thread)) console.log(line);
+    if (!command.statOnly && diff.diffText) {
+      console.log('');
+      console.log(diff.diffText);
+    }
+    return 0;
+  }
+  if (command.name === 'pr') {
+    const thread = findThread(await loadThreads(), command.id);
+    const outcome = await createPr(thread, { draft: command.draft, dryRun: command.dryRun });
+    console.log(outcome.detail);
+    return outcome.prUrl || command.dryRun ? 0 : 1;
   }
   // status runs probes (cached 5 min); run reuses cached state for speed.
   const snapshots = await backendSnapshots({ refresh: command.name === 'status' });

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { JcodeConfig } from '../config.js';
+import type { ScodeConfig } from '../config.js';
 import type { BackendId } from './types.js';
 
 const AUTH_TIMEOUT_MS = 5_000;
@@ -128,7 +128,7 @@ async function detectClaudeAuth(): Promise<string | null> {
   return claudeSettingsFallback();
 }
 
-export async function detectBackendAuth(id: BackendId, config: JcodeConfig): Promise<string | null> {
+export async function detectBackendAuth(id: BackendId, config: ScodeConfig): Promise<string | null> {
   switch (id) {
     case 'codex-a':
     case 'codex-b': {

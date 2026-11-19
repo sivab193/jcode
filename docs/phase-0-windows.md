@@ -34,7 +34,7 @@ Phase 1 must not start until the required smoke checks pass.
   authenticated default account. It returned real 5-hour and weekly windows
   with reset timestamps without consuming model quota.
 - A second Codex account home is not configured through
-  `JCODE_CODEX_A_HOME`/`JCODE_CODEX_B_HOME`, so the required two-account check
+  `SCODE_CODEX_A_HOME`/`SCODE_CODEX_B_HOME`, so the required two-account check
   is blocked.
 - Kiro `/usage`: BLOCKED by the same monthly hard-limit response.
 - Antigravity community quota reader: not installed; reactive structured usage
@@ -46,7 +46,7 @@ No account IDs, tokens, request IDs, or credentials are stored in this report.
 
 ## MCP checks
 
-- The repository's `jcode-tools` MCP server passes its standalone initialize +
+- The repository's `scode-tools` MCP server passes its standalone initialize +
   tools/list smoke test. It is not wired into each vendor CLI yet.
 - Codex lists enabled local MCP servers, but the nested smoke run could not
   launch the Windows registered-core helper. This is not a portable vendor MCP

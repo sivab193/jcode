@@ -7,8 +7,8 @@ dist/
 .DS_Store
 Thumbs.db
 
-# jcode runtime state must never be committed
-.jcode/
+# scode runtime state must never be committed
+.scode/
 config.json
 quota.json
 ledger.jsonl

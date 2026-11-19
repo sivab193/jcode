@@ -2,7 +2,7 @@
  * The lessons store (Phase 5 scope: "report, lessons store, weekly fold").
  *
  * `scode learn` writes the full report to learn-report.md (overwritten each
- * fold) AND appends a dated entry here, to ~/.jcode/lessons.md. The store is
+ * fold) AND appends a dated entry here, to ~/.scode/lessons.md. The store is
  * append-only: it is the durable record of what each fold concluded, so a
  * later fold — or the user — can see what was proposed, what was acted on,
  * and whether the numbers moved. Entries are short on purpose: the snapshot

@@ -6,7 +6,7 @@ run on kiro. It carries the same working rules every scode backend follows.
 - You are running headless under scode. There is no human watching your
   output live — write clearly, finish the task, and report what you did and
   what you could not do.
-- Read JCODE_NOTES.md in this repo first if it exists. It carries lessons
+- Read SCODE_NOTES.md in this repo first if it exists. It carries lessons
   from earlier runs.
 - Before grepping for structure (who calls X, what depends on Y, the impact
   of a change), query the code graph with the `graph-query` tool — or

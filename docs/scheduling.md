@@ -2,7 +2,7 @@
 
 A scheduled job is a task with a clock attached: scode dispatches it through
 the normal router (classify → select backend → dispatch with fallback) at
-the time you set. Schedules live in `~/.jcode/schedules.json`; ledger
+the time you set. Schedules live in `~/.scode/schedules.json`; ledger
 records for scheduled runs carry a `scheduleId` so `scode learn` and the
 token dashboard can tell them apart from manual runs.
 

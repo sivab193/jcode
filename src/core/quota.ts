@@ -178,7 +178,7 @@ export async function backendSnapshots(options?: { refresh?: boolean }): Promise
       : exhausted ? 'monthly limit reached · renews at the start of next month'
       : cooling ? `cooling down until ${quota.coolingUntil}`
         : !info.present ? `${BACKEND_BINARIES[id]} not installed`
-          : missingHome ? 'no CODEX_HOME configured (JCODE_CODEX_B_HOME)'
+          : missingHome ? 'no CODEX_HOME configured (SCODE_CODEX_B_HOME)'
             : quota.source === 'placeholder' && quotaMode === 'reactive' ? 'limits detected during runs'
               : quota.source === 'placeholder' && id === 'opencode' ? 'quota belongs to the selected provider'
                 : quota.source === 'placeholder' && id === 'claude' ? 'provider-metered usage'

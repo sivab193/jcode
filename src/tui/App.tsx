@@ -7,19 +7,22 @@ import { backendSnapshots, setManualQuota } from '../core/quota.js';
 import { routeTask } from '../core/router.js';
 import { loadSchedules, runDueSchedules } from '../core/schedules.js';
 import { getPriors } from '../core/scoring.js';
+import { loadThreads, type Thread } from '../core/threads.js';
 import { attachRun } from '../core/runs.js';
 import { computeTokenStats, formatCompactTokens, type TokenStats } from '../core/tokenStats.js';
 import { BACKEND_IDS, type BackendId, type BackendSnapshot, type ThemeId } from '../core/types.js';
 import { BackendsPane } from './BackendsPane.js';
 import { BackendEditor, type BackendEdit } from './BackendEditor.js';
 import { JobsPane, MAX_VISIBLE_JOBS, type JobView, type ScheduleView } from './JobsPane.js';
+import { LimitsView } from './LimitsView.js';
 import { ManualEntry } from './ManualEntry.js';
 import { hitTestTuiClick, parseSgrMouseClick } from './mouse.js';
 import { TaskBar } from './TaskBar.js';
+import { ThreadsView } from './ThreadsView.js';
 import { TokensDashboard } from './TokensDashboard.js';
 import { THEMES, THEME_ORDER } from './theme.js';
 
-type Mode = 'task' | 'manual' | 'backend' | 'help' | 'tokens';
+type Mode = 'task' | 'manual' | 'backend' | 'help' | 'tokens' | 'limits' | 'threads';
 type Focus = 'task' | 'backends' | 'jobs';
 
 /** Override cycle: auto, then each backend in order. */
@@ -38,6 +41,7 @@ export function App() {
   const [backends, setBackends] = useState<BackendSnapshot[]>([]);
   const [jobs, setJobs] = useState<JobView[]>([]);
   const [schedules, setSchedules] = useState<ScheduleView[]>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [tokenStats, setTokenStats] = useState<TokenStats | null>(null);
   const [themeId, setThemeId] = useState<ThemeId>('ember');
   const [message, setMessage] = useState('Loading local backend state…');
@@ -75,6 +79,7 @@ export function App() {
       id: item.id, brief: item.brief, backend: item.backend ?? 'auto',
       nextRunAt: item.nextRunAt, enabled: item.enabled,
     })));
+    setThreads(await loadThreads());
     // 2000 records ≈ 1000 runs — comfortably covers a heavy week.
     const records = await readLedgerTail(2000);
     setTokenStats(computeTokenStats(records, new Date()));
@@ -163,7 +168,7 @@ export function App() {
    */
   const handleTaskChange = (value: string) => {
     if (value.includes('[<')) return;
-    const shortcuts = ['m', 'r', 't', 'x', '?', 'q'];
+    const shortcuts = ['m', 'r', 't', 'u', 'G', 'x', '?', 'q'];
     if (focus === 'jobs') shortcuts.push('s', 'c', 'o');
     if (focus === 'backends') shortcuts.push('a', 'e', 'f');
     setTask((prev) => (prev === '' && value.length === 1 && shortcuts.includes(value) ? prev : value));
@@ -233,7 +238,7 @@ export function App() {
       if (mode === 'task') handleMouseClick(click.x, click.y);
       return;
     }
-    if (mode === 'help' || mode === 'tokens') {
+    if (mode === 'help' || mode === 'tokens' || mode === 'limits' || mode === 'threads') {
       setMode('task');
       return;
     }
@@ -252,6 +257,8 @@ export function App() {
     if (input === 'r' && task.length === 0) refreshSafely(true);
     if (input === 'm' && task.length === 0) setMode('manual');
     if (input === 't' && task.length === 0) setMode('tokens');
+    if (input === 'u' && task.length === 0) setMode('limits');
+    if (input === 'G' && task.length === 0) setMode('threads');
     if (input === 'x' && task.length === 0) {
       setInteractionMode((current) => current === 'task' ? 'chat' : 'task');
       setFocus('task');
@@ -389,6 +396,10 @@ export function App() {
       </Box>
       {mode === 'tokens' ? (
         <TokensDashboard stats={displayedTokenStats} theme={theme} />
+      ) : mode === 'limits' ? (
+        <LimitsView snapshots={backends} now={now} theme={theme} />
+      ) : mode === 'threads' ? (
+        <ThreadsView threads={threads} theme={theme} />
       ) : mode === 'help' ? (
         <Box borderStyle="round" borderColor={theme.border} flexDirection="column" paddingX={1}>
           <Text bold color={theme.primary}>Controls</Text>
@@ -406,6 +417,8 @@ export function App() {
           <Text>Account labels — `scode backend set ID --label NAME --account EMAIL`</Text>
           <Text>Native session — `scode session attach TASK_ID`</Text>
           <Text>t — token usage dashboard (when the task bar is empty)</Text>
+          <Text>u — usage limits per backend (when the task bar is empty)</Text>
+          <Text>G — threads (when the task bar is empty)</Text>
           <Text>Theme — run `scode theme set {THEME_ORDER.join('|')}`; restart to apply</Text>
           <Text>? — this help</Text>
           <Text>q — quit (when the task bar is empty)</Text>
@@ -431,7 +444,7 @@ export function App() {
           interactionMode={interactionMode}
         />
       )}
-      {mode !== 'tokens' && mode !== 'backend' && (
+      {mode !== 'tokens' && mode !== 'limits' && mode !== 'threads' && mode !== 'backend' && (
         <Box>
           <BackendsPane backends={backends} theme={theme} wide={!showJobs} selectedBackend={override} />
           {showJobs && (

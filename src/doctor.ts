@@ -3,7 +3,7 @@
  *
  * Verifies each backend's headless command works from THIS machine, plus the
  * quota probes, the Caveman wrap, and MCP config presence. Results are
- * written to ~/.jcode/smoke.json with a timestamp.
+ * written to ~/.scode/smoke.json with a timestamp.
  *
  * Honesty rules (handoff §7): if a CLI is not installed on this machine,
  * record which one and move on — do not fake a pass. A missing CLI is a
@@ -102,7 +102,7 @@ async function runSmokeDispatch(backend: BackendId, adapter: BackendAdapter): Pr
 }
 
 /**
- * Load-test the jcode-tools MCP server: spawn it, speak JSON-RPC over stdio,
+ * Load-test the scode-tools MCP server: spawn it, speak JSON-RPC over stdio,
  * and expect tools/list to return pdf-read, latex-build, file-peek,
  * graph-query.
  */
@@ -111,7 +111,7 @@ async function testMcpServer(): Promise<CheckResult> {
   try {
     await readFile(script, 'utf8');
   } catch {
-    return { id: 'mcp-server', label: 'MCP server: jcode-tools loads', status: 'fail', detail: `built server missing at ${script} — run npm run build` };
+    return { id: 'mcp-server', label: 'MCP server: scode-tools loads', status: 'fail', detail: `built server missing at ${script} — run npm run build` };
   }
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, [script], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
@@ -124,7 +124,7 @@ async function testMcpServer(): Promise<CheckResult> {
       resolvePromise(result);
     };
     const timer = setTimeout(() => finish({
-      id: 'mcp-server', label: 'MCP server: jcode-tools loads', status: 'fail', detail: 'no tools/list response within 10s',
+      id: 'mcp-server', label: 'MCP server: scode-tools loads', status: 'fail', detail: 'no tools/list response within 10s',
     }), 10_000);
     const send = (message: Record<string, unknown>) => child.stdin.write(`${JSON.stringify(message)}\n`);
     child.stdout.on('data', (chunk) => {
@@ -143,11 +143,11 @@ async function testMcpServer(): Promise<CheckResult> {
           } else if (message.id === 2) {
             clearTimeout(timer);
             const names = (message.result?.tools ?? []).map((tool) => tool.name).sort();
-            const expected = ['file-peek', 'graph-query', 'latex-build', 'pdf-read'];
+            const expected = ['file-peek', 'graph-query', 'latex-build', 'pdf-read', 'thread-diff', 'thread-list', 'thread-status'];
             const ok = JSON.stringify(names) === JSON.stringify(expected);
             finish({
               id: 'mcp-server',
-              label: 'MCP server: jcode-tools loads',
+              label: 'MCP server: scode-tools loads',
               status: ok ? 'pass' : 'fail',
               detail: ok ? `tools/list returned ${names.join(', ')}` : `expected ${expected.join(', ')}, got ${names.join(', ') || 'none'}`,
             });
@@ -159,11 +159,11 @@ async function testMcpServer(): Promise<CheckResult> {
     });
     child.on('error', (error) => {
       clearTimeout(timer);
-      finish({ id: 'mcp-server', label: 'MCP server: jcode-tools loads', status: 'fail', detail: error.message });
+      finish({ id: 'mcp-server', label: 'MCP server: scode-tools loads', status: 'fail', detail: error.message });
     });
     send({
       jsonrpc: '2.0', id: 1, method: 'initialize',
-      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'jcode-doctor', version: '0.1.0' } },
+      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'scode-doctor', version: '0.1.0' } },
     });
   });
 }
@@ -286,7 +286,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     for (const account of ['a', 'b'] as const) {
       const home = account === 'a' ? config.codexHomes.a : config.codexHomes.b;
       if (account === 'b' && !home) {
-        push({ id: `probe-codex-b`, label: 'quota probe: codex-b app-server', status: 'skip', detail: 'no second CODEX_HOME configured (JCODE_CODEX_B_HOME)' });
+        push({ id: `probe-codex-b`, label: 'quota probe: codex-b app-server', status: 'skip', detail: 'no second CODEX_HOME configured (SCODE_CODEX_B_HOME)' });
         continue;
       }
       const probed = await probeCodex(config, account).catch(() => null);
@@ -348,7 +348,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
     status: claudeProbe ? 'pass' : 'skip',
     detail: claudeProbe
       ? `${Math.round((claudeProbe.remainingFraction ?? 0) * 100)}% remaining`
-      : 'no status-line rate_limits file yet — written only when Claude Code runs (JCODE_CLAUDE_RATE_LIMITS_FILE)',
+      : 'no status-line rate_limits file yet — written only when Claude Code runs (SCODE_CLAUDE_RATE_LIMITS_FILE)',
   });
 
   // ── Caveman ──────────────────────────────────────────────────────────
@@ -446,8 +446,8 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<{ results:
       detail: text === null
         ? `no config file yet — run \`scode tools install\``
         : text.includes(SERVER_NAME)
-          ? 'jcode-tools entry present'
-          : `config exists without jcode-tools — run \`scode tools install\``,
+          ? 'scode-tools entry present'
+          : `config exists without scode-tools — run \`scode tools install\``,
     });
   }
 

@@ -34,7 +34,7 @@ iTerm2 3.3+ has a Python API (scripts control windows, tabs, panes, and the
 status bar). Possible scode companion, Phase 2+ at the earliest:
 
 - a status-bar component showing the tightest quota window at a glance
-  (reads `~/.jcode/quota.json`, no scode changes needed);
+  (reads `~/.scode/quota.json`, no scode changes needed);
 - a launcher script that opens scode in a dedicated tab with a profile.
 
 This is a separate small script, not a router feature. Don't build it until

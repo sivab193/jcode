@@ -12,7 +12,7 @@ separate prompt translation for the rules themselves.
 
 ## Working rules
 
-- Work in this repository. If JCODE_NOTES.md exists here, read it first — it
+- Work in this repository. If SCODE_NOTES.md exists here, read it first — it
   carries the lessons from earlier runs.
 - Do not invent data, files, or results. Say plainly what you could not verify.
 - Keep the change minimal and scoped to the task. Do not refactor unrelated code.

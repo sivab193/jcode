@@ -13,7 +13,7 @@ function git(args: string[], cwd: string): Promise<void> {
 }
 
 test('worktree: creates an isolated worktree and removes it', async () => {
-  const repo = join(tmpdir(), `jcode-wt-test-${Date.now()}`);
+  const repo = join(tmpdir(), `scode-wt-test-${Date.now()}`);
   await mkdir(repo, { recursive: true });
   try {
     await git(['init', '-b', 'main'], repo);
@@ -42,7 +42,7 @@ test('worktree: creates an isolated worktree and removes it', async () => {
 });
 
 test('worktree: falls back to cwd outside a git repo', async () => {
-  const dir = join(tmpdir(), `jcode-wt-plain-${Date.now()}`);
+  const dir = join(tmpdir(), `scode-wt-plain-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   try {
     assert.equal(await gitRoot(dir), null);

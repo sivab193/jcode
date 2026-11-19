@@ -10,7 +10,7 @@ import { execFile, spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { JcodeConfig } from '../config.js';
+import type { ScodeConfig } from '../config.js';
 import type { BackendId, QuotaWindow } from './types.js';
 
 export const PROBE_TIMEOUT_MS = 30_000;
@@ -111,8 +111,19 @@ export function parseCodexRateLimits(payload: unknown): QuotaWindow | null {
   const root = payload as Record<string, unknown>;
   // Response envelope: { jsonrpc, id, result: {...} } — accept both shapes.
   const result = (root.result ?? root) as Record<string, unknown>;
-  const windowsRaw = result.rateLimits ?? result.windows ?? result;
+  // Model-specific snapshots live under rateLimitsByLimitId; the 'codex'
+  // entry is the account-wide one T3 uses. Anything else is not the
+  // binding constraint for routing, so never mix it into the windows.
+  const byLimitId = result.rateLimitsByLimitId as Record<string, unknown> | undefined;
+  const snapshot = (byLimitId?.codex as Record<string, unknown> | undefined) ?? result;
+  const windowsRaw = snapshot.rateLimits ?? snapshot.windows ?? snapshot;
   if (typeof windowsRaw !== 'object' || windowsRaw === null) return null;
+  const planType = typeof snapshot.planType === 'string' ? snapshot.planType
+    : typeof (windowsRaw as Record<string, unknown>).planType === 'string'
+      ? (windowsRaw as Record<string, unknown>).planType as string
+      : undefined;
+  // Free/go plans have no 5h window — their primary window is monthly.
+  const primaryMinutes = planType === 'free' || planType === 'go' ? 43200 : 0;
 
   const windows: Array<{ name: string; remainingFraction: number; resetsAt: string | null; windowMinutes: number }> = [];
   for (const [name, value] of Object.entries(windowsRaw as Record<string, unknown>)) {
@@ -129,14 +140,73 @@ export function parseCodexRateLimits(payload: unknown): QuotaWindow | null {
         : name.includes('5h') || name.includes('five') ? 300
           : name.includes('week') ? 10080
             : name.includes('month') ? 43200
-              : 0;
+              : name === 'primary' ? primaryMinutes
+                : 0;
     const resetsAt = normalizeResetTime(w.resetsAt ?? w.resets_at ?? w.resetAt);
     windows.push({ name, remainingFraction: Math.round(Math.max(0, 1 - used / 100) * 10_000) / 10_000, resetsAt, windowMinutes });
+  }
+  // Monthly credit limit: reported as remaining, not used.
+  const individual = (snapshot.individualLimit ?? (windowsRaw as Record<string, unknown>).individualLimit) as Record<string, unknown> | undefined;
+  if (individual && typeof individual.remainingPercent === 'number') {
+    windows.push({
+      name: 'individualLimit',
+      remainingFraction: Math.round(Math.max(0, individual.remainingPercent / 100) * 10_000) / 10_000,
+      resetsAt: normalizeResetTime(individual.resetsAt ?? individual.resets_at),
+      windowMinutes: 43200,
+    });
   }
   if (windows.length === 0) return null;
   // The binding constraint is the tightest window.
   const tightest = windows.reduce((a, b) => (a.remainingFraction <= b.remainingFraction ? a : b));
-  return windowFrom(tightest.remainingFraction, tightest.resetsAt, tightest.windowMinutes, { windows });
+  return windowFrom(tightest.remainingFraction, tightest.resetsAt, tightest.windowMinutes, {
+    windows,
+    ...(planType ? { planType } : {}),
+    ...readResetCredits(result.resetCredits ?? snapshot.resetCredits),
+  });
+}
+
+function readResetCredits(value: unknown): { resetCredits?: { availableCount: number; nextExpiresAt?: string } } {
+  if (typeof value !== 'object' || value === null) return {};
+  const credits = value as { availableCount?: unknown; credits?: unknown };
+  if (typeof credits.availableCount !== 'number') return {};
+  const out: { availableCount: number; nextExpiresAt?: string } = { availableCount: credits.availableCount };
+  if (Array.isArray(credits.credits)) {
+    let earliest: number | null = null;
+    for (const credit of credits.credits) {
+      if (typeof credit !== 'object' || credit === null) continue;
+      const c = credit as { status?: unknown; expiresAt?: unknown };
+      if (c.status !== 'available') continue;
+      const ms = typeof c.expiresAt === 'number' ? c.expiresAt * 1000
+        : typeof c.expiresAt === 'string' ? new Date(c.expiresAt).getTime() : NaN;
+      if (Number.isFinite(ms) && (earliest === null || ms < earliest)) earliest = ms;
+    }
+    if (earliest !== null) out.nextExpiresAt = new Date(earliest).toISOString();
+  }
+  return { resetCredits: out };
+}
+
+/**
+ * Parse the reset time out of a Codex rate-limit error ("Try again at 3:37 PM."
+ * or "try again at Nov 11th, 2026 3:37 PM."). Codex drops seconds, so the
+ * result is one minute past the printed time. Null when no usable time is
+ * in the message or the time is not in the future. T3 does the same parse;
+ * this is the only reset signal when a proxy strips the snapshot.
+ */
+export function parseCodexResetFromMessage(message: string, failedAt: Date): string | null {
+  const match = message.match(/[Tt]ry again at (?:([A-Z][a-z]{2}) (\d{1,2})(?:st|nd|rd|th), (\d{4}) )?(\d{1,2}):(\d{2}) ([AP]M)\./);
+  if (!match) return null;
+  const [, monthName, day, year, hour, minute, meridiem] = match;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = monthName ? months.indexOf(monthName) : failedAt.getMonth();
+  const date = new Date(
+    year ? Number(year) : failedAt.getFullYear(),
+    month,
+    day ? Number(day) : failedAt.getDate(),
+    (Number(hour) % 12) + (meridiem === 'PM' ? 12 : 0),
+    Number(minute),
+  );
+  date.setMinutes(date.getMinutes() + 1);
+  return date.getTime() > failedAt.getTime() ? date.toISOString() : null;
 }
 
 function readCodexRateLimits(env: NodeJS.ProcessEnv): Promise<unknown | null> {
@@ -175,7 +245,7 @@ function readCodexRateLimits(env: NodeJS.ProcessEnv): Promise<unknown | null> {
             child.stdin.write(`${JSON.stringify({
               id: 2,
               method: 'account/rateLimits/read',
-              params: { excludeResetCreditDetails: true },
+              params: { excludeResetCreditDetails: false },
             })}\n`);
           } else if (message.id === 2) {
             finish(message);
@@ -197,7 +267,7 @@ function readCodexRateLimits(env: NodeJS.ProcessEnv): Promise<unknown | null> {
   });
 }
 
-export async function probeCodex(config: JcodeConfig, account: 'a' | 'b'): Promise<QuotaWindow | null> {
+export async function probeCodex(config: ScodeConfig, account: 'a' | 'b'): Promise<QuotaWindow | null> {
   const home = account === 'a' ? config.codexHomes.a : config.codexHomes.b;
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (home) env.CODEX_HOME = home;
@@ -297,7 +367,7 @@ export async function probeOpencode(): Promise<QuotaWindow | null> {
 // v2.1.80+ status lines expose five_hour / seven_day with used_percentage +
 // resets_at. A status-line script writes these to a file the router reads
 // (updates only when Claude Code runs). Probe only — the adapter stays
-// disabled until Pro is confirmed live. Path override: JCODE_CLAUDE_RATE_LIMITS_FILE.
+// disabled until Pro is confirmed live. Path override: SCODE_CLAUDE_RATE_LIMITS_FILE.
 
 export function parseClaudeRateLimits(payload: unknown): QuotaWindow | null {
   if (typeof payload !== 'object' || payload === null) return null;
@@ -305,10 +375,11 @@ export function parseClaudeRateLimits(payload: unknown): QuotaWindow | null {
   const limits = (root.rate_limits ?? root) as Record<string, unknown>;
   const windows: Array<{ name: string; remainingFraction: number; resetsAt: string | null; windowMinutes: number }> = [];
   for (const [name, value] of Object.entries(limits)) {
-    if (typeof value !== 'object' || value === null) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
     const w = value as Record<string, unknown>;
     const used = typeof w.used_percentage === 'number' ? w.used_percentage
-      : typeof w.usedPercent === 'number' ? w.usedPercent : null;
+      : typeof w.usedPercent === 'number' ? w.usedPercent
+        : typeof w.utilization === 'number' ? w.utilization : null;
     if (used === null || Number.isNaN(used)) continue;
     const resetsAt = typeof w.resets_at === 'string' ? w.resets_at
       : typeof w.resetsAt === 'string' ? w.resetsAt : null;
@@ -319,14 +390,70 @@ export function parseClaudeRateLimits(payload: unknown): QuotaWindow | null {
       windowMinutes: name.includes('five') ? 300 : name.includes('seven') ? 10080 : 0,
     });
   }
+  // Per-model weekly windows from the SDK (T3: "Weekly · <Model>").
+  const scoped = limits.model_scoped;
+  if (Array.isArray(scoped)) {
+    for (const entry of scoped) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const e = entry as Record<string, unknown>;
+      const used = typeof e.utilization === 'number' ? e.utilization
+        : typeof e.used_percentage === 'number' ? e.used_percentage : null;
+      if (typeof e.display_name !== 'string' || used === null || Number.isNaN(used)) continue;
+      const token = e.display_name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      windows.push({
+        name: `seven_day_${token}`,
+        remainingFraction: Math.round(Math.max(0, 1 - used / 100) * 10_000) / 10_000,
+        resetsAt: typeof e.resets_at === 'string' ? e.resets_at : typeof e.resetsAt === 'string' ? e.resetsAt : null,
+        windowMinutes: 10080,
+      });
+    }
+  }
+  // Monthly spend budget, when the SDK reports one.
+  const spend = readClaudeSpendPercent(limits);
+  if (spend !== null) {
+    windows.push({
+      name: 'spend',
+      remainingFraction: Math.round(Math.max(0, 1 - spend / 100) * 10_000) / 10_000,
+      resetsAt: null,
+      windowMinutes: 43200,
+    });
+  }
   if (windows.length === 0) return null;
   const tightest = windows.reduce((a, b) => (a.remainingFraction <= b.remainingFraction ? a : b));
   return windowFrom(tightest.remainingFraction, tightest.resetsAt, tightest.windowMinutes, { windows });
 }
 
+/** Spend usage as a percent (0–100), or null when unreported. */
+function readClaudeSpendPercent(limits: Record<string, unknown>): number | null {
+  const spend = limits.spend as Record<string, unknown> | undefined;
+  if (spend) {
+    // SDK minor-unit shape: { used: { amount_minor, currency, exponent }, limit: {...} }.
+    const used = spend.used as Record<string, unknown> | undefined;
+    const limit = spend.limit as Record<string, unknown> | undefined;
+    if (used && limit && typeof used.amount_minor === 'number' && typeof limit.amount_minor === 'number'
+      && limit.amount_minor > 0 && used.currency === limit.currency && used.exponent === limit.exponent) {
+      return (used.amount_minor / limit.amount_minor) * 100;
+    }
+    // Flat shape, same currency/exponent guard.
+    if (typeof spend.used === 'number' && typeof spend.limit === 'number' && spend.limit > 0
+      && typeof spend.currency === 'string' && typeof spend.exponent === 'number') {
+      return (spend.used / spend.limit) * 100;
+    }
+  }
+  const extra = limits.extra_usage as Record<string, unknown> | undefined;
+  if (extra) {
+    if (typeof extra.used_credits === 'number' && typeof extra.monthly_limit === 'number' && extra.monthly_limit > 0) {
+      return (extra.used_credits / extra.monthly_limit) * 100;
+    }
+    if (typeof extra.utilization === 'number') return extra.utilization;
+  }
+  return null;
+}
+
 export async function probeClaude(): Promise<QuotaWindow | null> {
-  const file = process.env.JCODE_CLAUDE_RATE_LIMITS_FILE
-    ?? join(homedir(), '.jcode', 'claude-rate-limits.json');
+  const file = process.env.SCODE_CLAUDE_RATE_LIMITS_FILE
+    ?? process.env.JCODE_CLAUDE_RATE_LIMITS_FILE
+    ?? join(homedir(), '.scode', 'claude-rate-limits.json');
   try {
     const text = await readFile(file, 'utf8');
     return parseClaudeRateLimits(JSON.parse(text) as unknown);
@@ -337,7 +464,7 @@ export async function probeClaude(): Promise<QuotaWindow | null> {
 
 // ─── Dispatcher ─────────────────────────────────────────────────────────────
 
-export async function probeBackend(id: BackendId, config: JcodeConfig): Promise<QuotaWindow | null> {
+export async function probeBackend(id: BackendId, config: ScodeConfig): Promise<QuotaWindow | null> {
   switch (id) {
     case 'codex-a': return probeCodex(config, 'a');
     case 'codex-b': return probeCodex(config, 'b');

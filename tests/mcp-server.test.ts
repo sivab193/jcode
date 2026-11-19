@@ -57,26 +57,26 @@ test('mcp server: initialize + tools/list returns the four tools', async () => {
   const server = startServer();
   try {
     const { send, waitFor } = rpc(server);
-    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'jcode-test', version: '0.1.0' } } });
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'scode-test', version: '0.1.0' } } });
     await waitFor(1);
     send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
     const listed = await waitFor(2);
     const names = (listed.result?.tools ?? []).map((tool) => tool.name).sort();
-    assert.deepEqual(names, ['file-peek', 'graph-query', 'latex-build', 'pdf-read']);
+    assert.deepEqual(names, ['file-peek', 'graph-query', 'latex-build', 'pdf-read', 'thread-diff', 'thread-list', 'thread-status']);
   } finally {
     server.kill();
   }
 });
 
 test('mcp server: tools/call file-peek works end to end', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'jcode-mcp-call-'));
+  const dir = await mkdtemp(join(tmpdir(), 'scode-mcp-call-'));
   const file = join(dir, 'hello.txt');
   await writeFile(file, 'alpha\nbeta\ngamma\n');
   const server = startServer();
   try {
     const { send, waitFor } = rpc(server);
-    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'jcode-test', version: '0.1.0' } } });
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'scode-test', version: '0.1.0' } } });
     await waitFor(1);
     send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     send({

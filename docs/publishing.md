@@ -51,5 +51,5 @@ stays out. Check any time with `npm pack --dry-run`.
 
 SemVer. `0.x` while the CLI surface is still settling; `1.0.0` when the
 host smoke tests pass and the TUI + `run` + `learn` commands are stable.
-Breaking changes to `~/.jcode` state files (ledger, quota, sessions) count
+Breaking changes to `~/.scode` state files (ledger, quota, sessions) count
 as breaking and bump the minor while in `0.x`.

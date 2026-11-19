@@ -30,7 +30,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function readApiKey(): Promise<string | null> {
-  const envKey = process.env.JCODE_BIVIA_API_KEY
+  const envKey = process.env.SCODE_BIVIA_API_KEY
+    || process.env.JCODE_BIVIA_API_KEY
     || process.env.BIVIA_API_KEY
     || process.env.A8_API_KEY;
   if (envKey) return envKey;
@@ -66,7 +67,7 @@ export async function biviaRouteDecision(
   brief: string,
   backendOptions: Array<{ id: BackendId; description: string }>,
 ): Promise<BiviaDecision | null> {
-  if (process.env.JCODE_BIVIA?.toLowerCase() === 'false') return null;
+  if ((process.env.SCODE_BIVIA ?? process.env.JCODE_BIVIA)?.toLowerCase() === 'false') return null;
   let apiKey: string | null;
   try {
     apiKey = await readApiKey();
